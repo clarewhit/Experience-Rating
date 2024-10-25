@@ -1,0 +1,15 @@
+numpy==2.0.1
+panel==1.4.4
+panel-modal==0.4.0
+jupyter_bokeh==4.0.5
+openpyxl==3.1.5
+pandas==2.2.2
+hvplot==0.8.3
+matplotlib
+mplcursors==0.5.3
+param==2.1.1
+polars==1.5.0
+altair[all]
+xlwings
+vegafusion[embed]
+logging==0.4.9.6
