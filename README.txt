@@ -12,3 +12,4 @@
 	Choose to use requirements.txt if given option
 4. Open the terminal (Terminal, New Terminal) and activate the environment by using the script ".\.venv\Scripts\activate"
 5. Install requirement library by using the script "pip install -r requirements.txt" (if not done in step 3)
+6. To enable running from jupyter notebook: pip install -U ipykernel
