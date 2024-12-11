@@ -1,5 +1,6 @@
 #This module contains functions that may be used across various models
 import shutil
+import ctypes
 import ast
 from io import StringIO
 import os
@@ -25,49 +26,51 @@ import _dataformClass as dfc
 dtypesconvert={'Boolean':pl.Boolean,'Utf8':pl.Utf8,'Utf8Trim.0':pl.Utf8,'Date':pl.Utf8,'Float64RoundToInt':pl.Float64,'Float64':pl.Float64,'Int64':pl.Int64}
 MYLOGGER = _myLogging.get_logger("Misc")       
 tempCodeResult=None
-
-def selectAnalysisFileOrFolder(connectiontype,analysistype,folderguess=None,):
+def selectAnalysisFile_PanelVersion(selectedfile=None,):
     MYLOGGER.debug('Starting Select Analysis File or Folder')  
-    if connectiontype==1: 
-        #For selecting analysis file in developer mode
-        root = Tk()
-        root.wm_attributes('-topmost', 1)
-        root.withdraw()
-        files = filedialog.askopenfilename(parent=root,title="Select analysis file",multiple=False)
+    specfiles=glob.glob(os.path.join('/app/RSA', selectedfile))
 
-        #If using executable, use this code
-        return files
-            
-    elif connectiontype==2:
-        # Select analysis folder
-        root = Tk()
-        root.wm_attributes('-topmost', 1)
-        root.withdraw()
-
-        if folderguess==None:
-            analysisfolder_selected = filedialog.askdirectory(parent=root,title="Select analysis folder")
-        elif os.path.isdir(folderguess):
-            folderguess=folderguess.replace("\\", "/")
-            analysisfolder_selected = filedialog.askdirectory(parent=root,title="Select analysis folder",initialdir=folderguess)
+    try:
+        if len(specfiles)>0:
+            return specfiles[0].replace(os.sep, "/")
         else:
-            analysisfolder_selected = filedialog.askdirectory(parent=root,title="Select analysis folder")
-
-        specfiles=glob.glob(os.path.join(analysisfolder_selected,'*.gzip'))
-        try:
-            if len(specfiles)>0:
-                return specfiles[0].replace("\\", "/")
-            else:
-                return None
-        except:
             return None
+    except:
+        return None
         
-def selectFiles():
-    print("Select files")
+def selectAnalysisFile_LocalVersion(filetypes=[("Excel File","*.xlsx;*.xlsm"),("Spec File","*.gzip")]):
+    #For selecting analysis file from python script, not via panel app
+    from tkinter import Tk
+    from tkinter import filedialog
+
+    MYLOGGER.debug('Starting Select Analysis File or Folder')  
+
     root = Tk()
     root.wm_attributes('-topmost', 1)
     root.withdraw()
-    files = filedialog.askopenfilename(parent=root,title="Select files",multiple=True)
-    return files        
+    selectedfile=filedialog.askopenfilename(parent=root,title="Select analysis file. Use filetype dropdown to specify Excel or gzip prepared Spec file.",
+                                 multiple=False,filetypes=filetypes)
+    
+    if selectedfile:
+        return selectedfile.replace(os.sep, "/")
+    else:
+        return ""
+        
+def showMessageBox(titlestring,textstring):
+    WS_EX_TOPMOST = 0x40000
+
+    # display a message box; execution will stop here until user acknowledges
+    ctypes.windll.user32.MessageBoxExW(None, textstring, titlestring, WS_EX_TOPMOST)
+
+def selectFiles_TkinterVersion():
+    #Not currently being used
+    #Future use: loading cat ELTs etc.
+    # root = Tk()
+    # root.wm_attributes('-topmost', 1)
+    # root.withdraw()
+    # files = filedialog.askopenfilename(parent=root,title="Select files",multiple=True)
+    # return files
+    pass        
         
 def convertDictToTable(configdict,dictname,dict):
     mapper=pl.DataFrame([{'keys':x, 'values':y} for x,y in dict.items()])
@@ -283,7 +286,7 @@ def createFolderIfNot(rootfolder,newfolder):
     retPath = os.path.join(rootfolder, newfolder)
     if not os.path.isdir(retPath):
         os.makedirs(retPath)
-    return str(retPath).replace("\\", "/")
+    return str(retPath).replace(os.sep, "/")
 
 def deleteFolderIfExists(rootfolder,newfolder):
     #Checks if the desired directory exists
@@ -343,6 +346,7 @@ def clip(_val, minval, maxval):
         .otherwise(_val)
     )
 
+
 def getMean(loss):
     #0 if no series passed, otherwise average
     if len(loss)==0:
@@ -390,40 +394,37 @@ def aggdescribe(df,infocol,compl,pctile):
 def load_spec_table_to_df(xlbook,connectionType,shtName, tableName,hasHeader,formatSchema={},defaultValues={},excludeIfNull={}):
     #connectionType: 1=xlwings, 2=openpyxl
     #read in table from excel and convert to dataframe and format columns
+    MYLOGGER.debug('Starting load_spec_table_to_df')
     if type(hasHeader)==str:
         if hasHeader=='True':
             hasHeader=True
         else:
             hasHeader=False
     
-    try:
-        if connectionType==2:
-            tblrange = xlbook[shtName].tables[tableName].ref
-            data_rows = []
-            first = True
-            for row in xlbook[shtName][tblrange]:
-                if first and hasHeader:
-                    columnlist = [cell.value for cell in row]
-                    first = False
-                else:
-                    data_rows.append([cell.value for cell in row])
-            if hasHeader:
-                result = pd.DataFrame(data_rows, columns=columnlist)
-                result[columnlist] = result[columnlist].astype(str)
+    if connectionType==2:
+        tblrange = xlbook[shtName].tables[tableName].ref
+        data_rows = []
+        first = True
+        for row in xlbook[shtName][tblrange]:
+            if first and hasHeader:
+                columnlist = [cell.value for cell in row]
+                first = False
             else:
-                result=pd.DataFrame(data_rows)
+                data_rows.append([cell.value for cell in row])
+        if hasHeader:
+            result = pd.DataFrame(data_rows, columns=columnlist)
+            result[columnlist] = result[columnlist].astype(str)
         else:
-            result = (
-                xlbook.sheets[shtName]
-                .range(tableName + "[[#All]]")
-                .options(pd.DataFrame, index=False,header=hasHeader)
-                .value)
-    except:
-        #ERROR
-        pass
+            result=pd.DataFrame(data_rows)
+    else:
+        result = (
+            xlbook.sheets[shtName]
+            .range(tableName + "[[#All]]")
+            .options(pd.DataFrame, index=False,header=hasHeader)
+            .value)
+
 
     #Try formatting dataframe
-    # try:
     result = result.astype(str)
     result=result.replace({'None':None,'nan':None,'NaT':None,'NaN':None,'':None,' ':None})
     result=pl.from_pandas(result)
@@ -439,8 +440,7 @@ def load_spec_table_to_df(xlbook,connectionType,shtName, tableName,hasHeader,for
             result=result.with_columns(pl.col(key).fill_null(val))
     if bool(formatSchema)==True:
         for key,val in formatSchema.items():
-
-
+            print(key,val)
             if val=='Boolean':
                 result=result.with_columns(pl.when(pl.col(key)=='True')
                                            .then(pl.lit(True))
@@ -462,8 +462,6 @@ def load_spec_table_to_df(xlbook,connectionType,shtName, tableName,hasHeader,for
 
     result.columns=actualcols
     return result
-    # except:
-    #     return pl.DataFrame()
     
 def assertStringFormats(df,hasHeader,formatSchema):
     #Try formatting dataframe
@@ -595,12 +593,13 @@ def recapitalizeConfigDictKey(_configdict,_key):
 
 def dfReplaceNanNone(df):
     #replace NaN with None
-    return (df
+    result= (df
               .with_columns(
                 pl.when(pl.col(pl.Utf8).is_in(["nan","None","NaN"]))
                 .then(None)
                 .otherwise(pl.col(pl.Utf8))
-                .keep_name()))
+                .name.keep()))
+    return result
 
 def getFileList(folder,extension):
     MYLOGGER.debug("Entered getFileList")
@@ -719,8 +718,11 @@ def createAllSpecWidgetBlanks(specs,dataTypes,wtypeMap):
     for spec in speclist:
         blankWidgetMap[spec] = {}
         for row in tempDataTypes[tempDataTypes['SpecSheet']==spec].itertuples():
+            print('row.DataFormat')
+            print(row.DataFormat)
+            print(row)
             
-            keyTypeFormat=row.DataType+'|'+row.DataFormat if row.DataType=='Data Entry' else row.DataType+'|None'
+            keyTypeFormat=row.DataType+'|'+row.DataFormat if row.DataFormat else row.DataType+'|None'  #=='Data Entry'
             widgetType=wtypeMap[keyTypeFormat]
 
             #region ##build blank widget
@@ -941,6 +943,7 @@ def createSpecWidgets(specs,blankDict,specWidgetDict,dfInfo,dataTypes,spec=None,
                                     if val==None or val=="" or val=="nan" or val=="NaN" or pd.isna(val):
                                         val="None"
                                     else:
+                                        print(key,val)
                                         if thisformat=="Percent":
                                             val=format(val, '0.00%')
                                         elif thisformat=="Whole Number":
@@ -948,7 +951,7 @@ def createSpecWidgets(specs,blankDict,specWidgetDict,dfInfo,dataTypes,spec=None,
                                         elif thisformat=="Currency Whole Number":
                                             val='$'+format(val, ',')
                                     
-                                    tempwidget=pn.pane.Markdown('#### '+val,width=275,styles={'text-align':'right'},height_policy='min')
+                                    tempwidget=pn.pane.Markdown('#### '+str(val),width=275,styles={'text-align':'right'},height_policy='min')
                                     result[thisspec][tempval]['View'][key]=result[thisspec][tempval]['View'][key]+[tempwidget]                                     
 
                     else:
@@ -995,7 +998,7 @@ def createSpecWidgets(specs,blankDict,specWidgetDict,dfInfo,dataTypes,spec=None,
                                         elif thisformat=="Currency Whole Number":
                                             val='$'+format(val, ',')
 
-                                    tempwidget=pn.pane.Markdown('#### '+val,width=275,styles={'text-align':'right'},height_policy='min') 
+                                    tempwidget=pn.pane.Markdown('#### '+str(val),width=275,styles={'text-align':'right'},height_policy='min') 
                                     result[thisspec][tempval][subColumnValue]['View'][key]=tempwidget                                
         #endregion
 
@@ -1009,7 +1012,7 @@ def createSpecWidgets(specs,blankDict,specWidgetDict,dfInfo,dataTypes,spec=None,
         else:
             return result
 
-def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,dfInfo,dataTypes,dfCardInfo,spec=None,selected=None) -> dict:
+def createDataFormWidgetDict_accordion(specs,blankDict,specWidgetDict,dataformWidgetDict,dfInfo,dataTypes,dfCardInfo,spec=None,selected=None) -> dict:
     #use by assigning result to same dataformWidgetDict as used in input parameters.
     #If the key already exists, it will be skipped
     #if the key doesn't exist, it will be added to dictionary
@@ -1126,6 +1129,8 @@ def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,d
 
                     #Create the Card and add to output
                     if ((card_orientation == 'Field names in columns - Single row per item')  | (card_orientation == 'Field names in columns - Multiple rows per item')):  #| (card_orientation == 'None')
+                        print('here')
+                        print(specWidget)
                         view_card_main = pn.WidgetBox(styles={'background':'#f5f5f5'},margin=(0,0,0,5))
                         edit_card_main = pn.WidgetBox(styles={'background':'#f5f5f5'},margin=(0,0,0,5))
                         view_card_main.append(pn.pane.HTML(styles={'height':'2px','width_policy':'max','background-color': '#bfbfbf'}))
@@ -1135,7 +1140,7 @@ def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,d
 
                         for col in collist:
                             #The column is ordered by 'Column Order'
-                            column_title = pn.pane.Markdown('#### '+ col, width=275,styles={'text-align':'right'})
+                            column_title = pn.pane.Markdown('#### '+ str(col), width=275,styles={'text-align':'right'})
                             view_card_title_output.append(column_title)
                             edit_card_title_output.append(column_title)
                         
@@ -1163,7 +1168,7 @@ def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,d
                             for col in collist:
                                 view_card_main_output=pn.Row(height_policy='min')
                                 edit_card_main_output=pn.Row(height_policy='min')
-                                column_title = pn.pane.Markdown('#### '+ col+':', width=275,styles={'text-align':'left'})
+                                column_title = pn.pane.Markdown('#### '+ str(col)+':', width=275,styles={'text-align':'left'})
                                 view_card_main_output.append(column_title)
                                 edit_card_main_output.append(column_title)
                                 view_column_value = pn.Column(specWidget['View'][col][rownum-1],width=250)
@@ -1191,7 +1196,7 @@ def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,d
 
                         for subspec in subspecs:
                             #The column is ordered by 'Column Order'
-                            subspec_title = pn.pane.Markdown('### '+ subspec, width=275,styles={'text-align':'right'})
+                            subspec_title = pn.pane.Markdown('### '+ str(subspec), width=275,styles={'text-align':'right'})
                             view_card_title_output.append(subspec_title)
                             edit_card_title_output.append(subspec_title)
                             
@@ -1201,8 +1206,8 @@ def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,d
                         edit_card_main.append(pn.pane.HTML(styles={'height':'5px','background-color': '#1d5aa5'},width_policy='max'))
 
                         for col in collist:
-                            view_card_main_output=pn.Row(pn.pane.Markdown('#### '+ col+':', width=275))
-                            edit_card_main_output=pn.Row(pn.pane.Markdown('#### '+ col+':', width=275))
+                            view_card_main_output=pn.Row(pn.pane.Markdown('#### '+ str(col)+':', width=275))
+                            edit_card_main_output=pn.Row(pn.pane.Markdown('#### '+ str(col)+':', width=275))
 
                             for subspec in subspecs:
                                 view_column_value = specWidget[subspec]['View'][col]
@@ -1227,6 +1232,231 @@ def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,d
                     thisaccordionView.active=[0]
                     view_main=thisaccordionView
                     edit_main=thisaccordionEdit
+
+                result[thisspec][tempval]['View']=view_main
+                result[thisspec][tempval]['Edit']=edit_main
+
+        if (selected!=None) & (len(spec)==1):
+            return result[spec[0]][selected]
+        else:
+            return result
+
+def createDataFormWidgetDict(specs,blankDict,specWidgetDict,dataformWidgetDict,dfInfo,dataTypes,dfCardInfo,spec=None,selected=None) -> dict:
+    #use by assigning result to same dataformWidgetDict as used in input parameters.
+    #If the key already exists, it will be skipped
+    #if the key doesn't exist, it will be added to dictionary
+    #Then, use the dictionary to create the dataform
+    MYLOGGER.debug('Enter createDataFormDict')   
+    tempDataTypes=dataTypes.copy()
+    tempdfInfo=dfInfo.copy()
+    speclist=tempDataTypes['Spec Sheet'].unique().tolist()
+
+    #region
+    if spec==None:
+        spec=speclist
+    else:
+        tempdfInfo=tempdfInfo[tempdfInfo['Spec Sheet']==spec]
+        tempDataTypes=tempDataTypes[tempDataTypes['Spec Sheet']==spec]
+        spec=list_intersection([spec],speclist)
+    #endregion    
+    
+    if len(spec)==0:
+        return dataformWidgetDict
+    else:
+        selectColMap=dict(zip(tempdfInfo['Spec Sheet'],tempdfInfo['Column for Select Dropdown']))
+        result=dataformWidgetDict.copy()
+    
+        #region
+        selectColVals={}
+        for key,val in selectColMap.items():
+            if val in specs[key].columns:
+                selectColVals[key]=specs[key].get_column(val).unique().to_list()
+            else:
+                selectColVals[key]=[]
+        #endregion  
+
+        #region
+        for thisspec in spec:
+            #See if key already exists, if not create blank
+            try:
+                temp=result[thisspec].keys()
+            except:
+                result[thisspec]={}        
+        
+            tempSelCol=selectColMap[thisspec]
+            tempSelColVals=selectColVals[thisspec]  
+
+            if selected==None:
+                pass
+            else:
+                tempSelColVals=list_intersection([selected],tempSelColVals)
+
+            for tempval in tempSelColVals:
+                try:
+                    testforkeys=result[thisspec][tempval]['View'].keys()
+                    #if key already exists, skip
+                except:
+                    result[thisspec][tempval]={}
+                    result[thisspec][tempval]['View']={}
+                    result[thisspec][tempval]['Edit']={}
+
+                default_orientation = 'Field names in columns - Single row per item'
+
+                view_main = pn.Column()
+                edit_main = pn.Column()
+
+                cardInfo = dfCardInfo[dfCardInfo['Spec Sheet'] == thisspec] #Get the card info for the spec sheet
+                
+                specWidget=createSpecWidgets(specs,blankDict,specWidgetDict,dfInfo,dataTypes,thisspec,tempval) #Create the widget if it doesn't exist
+                
+                dtypeInfo=dataTypes[dataTypes['Spec Sheet']==thisspec].sort_values(by=['Card Number','Column Order']).copy()
+                cards=sorted(dtypeInfo['Card Number'].unique().tolist())
+
+                if len(cards)==1:
+                    hidecardheader=True
+                else:
+                    hidecardheader=False
+                    thistabView=pn.Tabs(width_policy='max',height_policy='max')
+                    thistabEdit=pn.Tabs(width_policy='max',height_policy='max')
+                    # thisaccordionView=pn.Accordion(width_policy='max',height_policy='min',
+                    #                                header_color='#1d5aa5')
+                    # thisaccordionEdit=pn.Accordion(width_policy='max',height_policy='min',
+                    #                                header_color='#1d5aa5')
+
+                for card_num in cards: 
+                    #Set up Card Parameters
+                    collist=dtypeInfo[dtypeInfo['Card Number']==card_num].sort_values(by=['Column Order'])['Column Name'].tolist() 
+
+                    #Check for Card title (if this needs to be changed or is set to None)
+                    try:
+                        cardnumInfo=cardInfo[cardInfo['Card Number'] == card_num].to_dict(orient='records')[0]
+                    except:
+                        cardnumInfo={}
+                    
+                    if len(list(cardnumInfo.keys()))==0:
+                        card_title = "" 
+                        card_orientation=default_orientation                    
+                    else:
+                        if ((len(cardnumInfo)==0) | (cardnumInfo['Card Name']==None)):
+                            card_title = ""
+                        else:
+                            card_title = cardnumInfo['Card Name']
+
+                        #Check for dataform orientation
+                        try:  
+                            card_orientation = cardnumInfo['Dataform Orientation']  
+                        except:
+                            card_orientation = default_orientation
+
+                    #Create the Card and add to output
+                    if ((card_orientation == 'Field names in columns - Single row per item')  | (card_orientation == 'Field names in columns - Multiple rows per item')):  #| (card_orientation == 'None')
+                        view_card_main = pn.WidgetBox(styles={'background':'#f5f5f5'},width_policy='max') #margin=(0,0,0,5))
+                        edit_card_main = pn.WidgetBox(styles={'background':'#f5f5f5'},width_policy='max') #,margin=(0,0,0,5))
+                        view_card_main.append(pn.pane.HTML(styles={'height':'2px','width_policy':'max','background-color': '#bfbfbf'}))
+                        edit_card_main.append(pn.pane.HTML(styles={'height':'2px','width_policy':'max','background-color': '#bfbfbf'}))
+                        view_card_title_output=pn.Row() 
+                        edit_card_title_output=pn.Row()
+
+                        for col in collist:
+                            #The column is ordered by 'Column Order'
+                            column_title = pn.pane.Markdown('#### '+ str(col), width=275,styles={'text-align':'right'})
+                            view_card_title_output.append(column_title)
+                            edit_card_title_output.append(column_title)
+                        
+                        view_card_main.append(view_card_title_output) 
+                        edit_card_main.append(edit_card_title_output) 
+
+                        for rownum in range(len(specWidget['View'][collist[0]])): 
+                            view_card_main_output=pn.Row(height_policy='min')
+                            edit_card_main_output=pn.Row()
+
+                            for col in collist:
+                                view_column_value = specWidget['View'][col][rownum-1]
+                                edit_column_value = specWidget['Edit'][col][rownum-1]
+                                view_card_main_output.append(view_column_value)
+                                edit_card_main_output.append(edit_column_value)
+                            
+                            view_card_main.append(view_card_main_output)
+                            view_card_main.append(pn.layout.Divider(margin=(-20, 0, 0, 0)))
+                            edit_card_main.append(edit_card_main_output)
+                    elif card_orientation == 'Field names in rows - Single data column per item':
+                        view_card_main = pn.Column()
+                        edit_card_main = pn.Column()
+
+                        for rownum in range(len(specWidget['View'][collist[0]])): 
+                            for col in collist:
+                                view_card_main_output=pn.Row() #height_policy='min')
+                                edit_card_main_output=pn.Row() #height_policy='min')
+                                column_title = pn.pane.Markdown('#### '+ str(col)+':', width=275,styles={'text-align':'left'})
+                                view_card_main_output.append(column_title)
+                                edit_card_main_output.append(column_title)
+                                view_column_value = pn.Column(specWidget['View'][col][rownum-1],width=250)
+                                edit_column_value = pn.Column(specWidget['Edit'][col][rownum-1],width=250)
+                                view_card_main_output.append(view_column_value)
+                                edit_card_main_output.append(edit_column_value)
+       
+                                view_card_main.append(view_card_main_output) 
+                                if col!=collist[-1]:
+                                    view_card_main.append(pn.layout.Divider(margin=(-20, 0, 0, 0)))                                  
+                                edit_card_main.append(edit_card_main_output)   
+                    elif card_orientation == 'Field names in rows - Multiple data columns per item':
+                        tempcss = """
+                                    :host {
+                                    --padding-vertical: 1px;
+                                    }
+                                    """
+                        view_card_main = pn.Column(scroll=True)
+                        edit_card_main = pn.Column(scroll=True)
+                        view_card_title_output=pn.Row(pn.pane.Markdown('#### ', width=275,height=50,styles={'text-align':'left'},stylesheets=[tempcss]))            
+                        edit_card_title_output=pn.Row(pn.pane.Markdown('#### ', width=275,height=50,styles={'text-align':'left'},stylesheets=[tempcss]))            
+                        subspecs=list(specWidget.keys())
+                        availcols=specWidget[subspecs[0]]['View'].keys()
+                        collist=[col for col in collist if col in availcols]
+
+                        for subspec in subspecs:
+                            #The column is ordered by 'Column Order'
+                            subspec_title = pn.pane.Markdown('### '+ str(subspec), width=275,styles={'text-align':'right'})
+                            view_card_title_output.append(subspec_title)
+                            edit_card_title_output.append(subspec_title)
+                            
+                        view_card_main.append(view_card_title_output)   
+                        view_card_main.append(pn.pane.HTML(styles={'height':'5px','background-color': '#1d5aa5'},width_policy='max'))          
+                        edit_card_main.append(edit_card_title_output)             
+                        edit_card_main.append(pn.pane.HTML(styles={'height':'5px','background-color': '#1d5aa5'},width_policy='max'))
+
+                        for col in collist:
+                            view_card_main_output=pn.Row(pn.pane.Markdown('#### '+ str(col)+':', width=275))
+                            edit_card_main_output=pn.Row(pn.pane.Markdown('#### '+ str(col)+':', width=275))
+
+                            for subspec in subspecs:
+                                view_column_value = specWidget[subspec]['View'][col]
+                                view_card_main_output.append(pn.Column(view_column_value,width=300))
+                                edit_column_value = specWidget[subspec]['Edit'][col]
+                                edit_card_main_output.append(pn.Column(edit_column_value,width=300))                                    
+                            
+                            view_card_main.append(view_card_main_output)
+                            if col!=collist[-1]:
+                                view_card_main.append(pn.layout.Divider(margin=(-20, 0, 0, 0)))                             
+                            edit_card_main.append(edit_card_main_output)
+
+                    if hidecardheader==True:
+                        view_main.append(pn.Column(view_card_main, width_policy='max'))
+                        edit_main.append(pn.Column(edit_card_main, width_policy='max'))
+                    else:
+                        thistabView.append((card_title,view_card_main))
+                        thistabEdit.append((card_title,edit_card_main))
+                        # thisaccordionView.append((card_title,view_card_main))
+                        # thisaccordionEdit.append((card_title,edit_card_main))
+
+                if hidecardheader==False:
+                    # thisaccordionEdit.active=[0]
+                    # thisaccordionView.active=[0]
+                    # view_main=thisaccordionView
+                    # edit_main=thisaccordionEdit
+                    # thistabView.active=[0]
+                    # thistabEdit.active=[0]
+                    view_main=thistabView
+                    edit_main=thistabEdit                    
 
                 result[thisspec][tempval]['View']=view_main
                 result[thisspec][tempval]['Edit']=edit_main
