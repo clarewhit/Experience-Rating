@@ -532,48 +532,48 @@ def configparser_to_dict(configFilename,fromdict=False):
     import configparser
 
     MYLOGGER.debug('Starting configparser_to_dict')
-    try:
-        config_dict = {}
-        
-        config = configparser.ConfigParser()
-        config.read(configFilename)
+   # try:
+    config_dict = {}
+    
+    config = configparser.ConfigParser()
+    config.read(configFilename)
+    print(config)
+    for section in config.sections():
+        config_dict[section] = {}
+        if section!='dict_specDataFormats':
+            for key, value in config.items(section):
 
-        for section in config.sections():
-            config_dict[section] = {}
-            if section!='dict_specDataFormats':
-                for key, value in config.items(section):
+                # Now try to convert back to original types if possible
+                if value in ['True',True]:
+                    value = True
+                elif value in ['False',False]:
+                    value = False   
+                elif value in ['None',None]:
+                    value = None
+                elif isinstance(value, str):
+                    try:
+                        if '.' in value:
+                            value = float(value)
+                        else:
+                            value = int(value)
+                    except:
+                        pass
+                config_dict[section][key] = value
+        else:
+            config_dict[section]=dict(config.items(section))
+            
+    # Now drop root section if present
+    config_dict.pop('root', None)
 
-                    # Now try to convert back to original types if possible
-                    if value in ['True',True]:
-                        value = True
-                    elif value in ['False',False]:
-                        value = False   
-                    elif value in ['None',None]:
-                        value = None
-                    elif isinstance(value, str):
-                        try:
-                            if '.' in value:
-                                value = float(value)
-                            else:
-                                value = int(value)
-                        except:
-                            pass
-                    config_dict[section][key] = value
-            else:
-                config_dict[section]=dict(config.items(section))
-                
-        # Now drop root section if present
-        config_dict.pop('root', None)
+    #Recapitalize 
+    tempdict={}
+    for key in config_dict.keys():
+        if key[-5:]!="_keys":
+            tempdict[key]=recapitalizeConfigDictKey(config_dict,key)
 
-        #Recapitalize 
-        tempdict={}
-        for key in config_dict.keys():
-            if key[-5:]!="_keys":
-                tempdict[key]=recapitalizeConfigDictKey(config_dict,key)
-
-        return tempdict
-    except:
-        return "Error Creating Config: "+configFilename
+    return tempdict
+   # except:
+    #    return "Error Creating Config: "+configFilename
 
 def recapitalizeConfigDictKey(_configdict,_key):
     try:

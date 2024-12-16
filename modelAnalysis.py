@@ -34,10 +34,10 @@ class Analysis():
         self.modeltype=modeltype
         MYLOGGER.debug('Starting Analysis Class initialization')    
         self.analysisDictList= ["dict_specSheetName","dict_specTableName","dict_specHeader","dict_specInfoTable","dict_excelResultSheets","dict_excelResultTables",
-                        "dict_excelResultFunctions","dict_specDataFormats","dict_keyCols","dict_valCols"]
+                                "dict_specDataFormats","dict_keyCols","dict_valCols"]
 
         ########################ADD SPECIFIC DICTIONARIES TO ANALYSIS OBJECT################
-        self.analysisDictList =self.analysisDictList+["dict_complement"]
+        
         ########################END ADD SPECIFIC DICTIONARIES TO ANALYSIS OBJECT################
 
         
@@ -46,14 +46,18 @@ class Analysis():
                 CWD=os.path.dirname(self.book.sheets["Model Path"].range("_executablepath").value)
             except:
                 self.error="Unable to find model path in Excel file."
-                return self.error
+                return
         else:
             CWD=os.path.dirname(os.path.realpath(__file__))           
 
+        print(os.path.join(CWD, CONFIGFILE))
         self.configdict= _misc.configparser_to_dict(os.path.join(CWD, CONFIGFILE))
-
+        print(self.configdict)
+        
         #Create dictionaries from config file
         for key in self.analysisDictList:
+            print(key)
+            print(self.configdict[key])
             exec('self.'+key+"=self.configdict[key]")
 
             try:
@@ -150,12 +154,13 @@ class Analysis():
 
         #######################MODEL-SPECIFIC CODE#######################
         #Update/initialize any model-specific dictionaries
-        self.preppedspecs.update({"dict_complement":self.dict_complement})
-        aFns.allSummaryUWStatistics(self.preppedspecs)
+        #self.preppedspecs.update({"dict_complement":self.dict_complement})
+        #aFns.allSummaryUWStatistics(self.preppedspecs)
+        
+        #######################END MODEL-SPECIFIC CODE####################
         
         if connectiontype in [0,1]:
             aFns.modelSpecificAnalysisSteps(self)
-        #######################END MODEL-SPECIFIC CODE####################
 
     def prepSpecs(self):
         #Perform initial data cleaning steps

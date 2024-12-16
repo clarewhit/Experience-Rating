@@ -30,11 +30,11 @@ def initialCleanSpecs(specdict,xlspath):
             result.update({"losscsv":result[key].filter(pl.col("Information")=="CSV Filename").get_column("Value")[0] if result[key].filter(pl.col("Information")=="Loss Data Source").get_column("Value")[0]=="CSV" else None})
             result.update({"aggregationThreshold":float(result[key].filter(pl.col("Information")=="Aggregation Threshold for Events").get_column("Value")[0])})
             result.update({"detaildestination":result[key].filter(pl.col("Information")=="Destination for Gross and Ceded Detail").get_column("Value")[0]})
-            if result.detaildestination not in ['This File','New File','Exclude']:
-                result.detaildestination="This File"            
+            if result["detaildestination"] not in ['This File','New File','Exclude']:
+                result["detaildestination"]="This File"            
             result.update({"cededDetailVals":result[key].filter(pl.col("Information")=="Evaluation Dates for Ceded Detail").get_column("Value")[0]})
-            if result.cededDetailVals not in ['Current','All']:
-                result.cededDetailVals="Current"
+            if result["cededDetailVals"] not in ['Current','All']:
+                result["cededDetailVals"]="Current"
 
             MYLOGGER.debug("Finished cleaning specs for " + key)
         elif key == "Risk Sources":
@@ -932,7 +932,7 @@ def calcTrendedAndUntrendedLosses(specdict):
         dfResults=dfResults.drop(colstodelete)
 
     dfResults=(dfResults
-                .with_columns(pl.col('Risk Source').replace_strict(specdict.mapECOXPLALAEHandling,default='Loss Only').alias('ECOXPL ALAE Handling'))
+                .with_columns(pl.col('Risk Source').replace_strict(specdict["mapECOXPLALAEHandling"],default='Loss Only').alias('ECOXPL ALAE Handling'))
                 #.join(mapper, on='Risk Source', how='left')
                 .with_columns(pl.col(["Gross Medical Paid","Gross Indemnity Paid","Gross Medical Incurred","Gross Indemnity Incurred",
                                 "Gross Expense Paid","Gross Expense Incurred","Net Medical Paid","Net Indemnity Paid","Net Medical Incurred",
@@ -1302,7 +1302,7 @@ def calcTrendedAndUntrendedLosses(specdict):
                 #Change both claim number and occurrence number to attritional
                 #Reaggregate claims to claim number level to incorporate aggregation
                 
-                .with_columns(pl.when((specdict.aggregationThreshold>pl.col('Total LALAE')) & (pl.col('Occ LALAE')>0))
+                .with_columns(pl.when((specdict["aggregationThreshold"]>pl.col('Total LALAE')) & (pl.col('Occ LALAE')>0))
                                 .then(pl.lit(True))
                                 .otherwise(pl.lit(False))
                                 .alias('Aggregate')
@@ -1837,14 +1837,14 @@ def MultiClaimDetail(specdict):
     return temp
 
 def modelSpecificAnalysisSteps(analysis):
-    analysis.spec_dfs=prepLossesAndClaimInfo(analysis.spec_dfs)
+    #analysis.preppedspecs=prepLossesAndClaimInfo(analysis.preppedspecs)
     
-    analysis.spec_dfs["Gross Loss Summary"]=GrossLossSummary(analysis.spec_dfs)
-    analysis.spec_dfs["Ceded Loss Summary"]=CededLossesAllLayers(analysis.spec_dfs)
-    analysis.spec_dfs["Event Summary"]=MultiClaimDetail(analysis.spec_dfs)
+    analysis.preppedspecs["Gross Loss Summary"]=GrossLossSummary(analysis.preppedspecs)
+    analysis.preppedspecs["Ceded Loss Summary"]=CededLossesAllLayers(analysis.preppedspecs)
+    analysis.preppedspecs["Event Summary"]=MultiClaimDetail(analysis.preppedspecs)
     
-    _misc.copyTableToSht(analysis.book,1,analysis.spec_dfs["Gross Loss Summary"],'Model Results','GrossLossSummary')
-    _misc.copyTableToSht(analysis.book,1,analysis.spec_dfs["Ceded Loss Summary"],'Model Results','CededLossSummary')
-    _misc.copyTableToSht(analysis.book,1,analysis.spec_dfs["Event Summary"],'Model Results','MultiClaimDetail')
+    _misc.copyTableToSht(analysis.book,1,analysis.preppedspecs["Gross Loss Summary"],'Model Results','GrossLossSummary')
+    _misc.copyTableToSht(analysis.book,1,analysis.preppedspecs["Ceded Loss Summary"],'Model Results','CededLossSummary')
+    _misc.copyTableToSht(analysis.book,1,analysis.preppedspecs["Event Summary"],'Model Results','MultiClaimDetail')
     
 
